@@ -30,7 +30,13 @@ var expressify_path = path => {
 
 var buildEventFromRequestTemplate = (path, req, method, contentType) => {
   var requestTemplates = method['x-amazon-apigateway-integration'].requestTemplates;
-  var templates = requestTemplates[contentType] || requestTemplates['application/json'];
+  
+  if(requestTemplates) {
+    var templates = requestTemplates[contentType] || requestTemplates['application/json'] ||  "{}";
+  } else {
+    var templates = "{}";
+  }
+
   return JSON.parse(mappingTemplate({
     template: templates,
     payload: req.rawBody,
@@ -119,18 +125,20 @@ var transformResponse = (res, method, body, contentType, isError) => {
 
 var addAndHandleRequest = (path, verb, method, lambda) => {
   const route = expressify_path(path);
-  app[verb.toLowerCase()](route, (req, res) => {
-    var contentType = req.headers['content-type'] || 'application/json';
-    var event = buildEventFromRequestTemplate(path, req, method, contentType);
-
-    Q.ninvoke(lambda, 'handler', event, context)
-      .then(body => {
-        transformResponse(res, method, body, contentType);
-      })
-      .catch(err => {
-        transformResponse(res, method, err, contentType, true);
-      });
-  });
+  if(['GET','POST','PUT','DELETE','OPTIONS'].includes(verb.toUpperCase())) {  
+    app[verb.toLowerCase()](route, (req, res) => {
+      var contentType = req.headers['content-type'] || 'application/json';
+      var event = buildEventFromRequestTemplate(path, req, method, contentType);
+      
+      Q.ninvoke(lambda, 'handler', event, context)
+        .then(body => {
+          transformResponse(res, method, body, contentType);
+        })
+        .catch(err => {
+          transformResponse(res, method, err, contentType, true);
+        });
+    });
+  }
 }
 
 module.exports = (lambda, swaggerFile, port, callback) => {
